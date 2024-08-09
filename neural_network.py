@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pickle
 
 class NeuralNetwork:
@@ -29,14 +28,7 @@ class NeuralNetwork:
         one_hot = np.zeros((y.size, num_classes))
         one_hot[np.arange(y.size), y] = 1
 
-        return one_hot
-    
-    def categorical_cross_entropy(self, y_true, y_pred):
-
-        epsilon = 1e-15  # Small value to avoid log(0)
-        y_pred = np.clip(y_pred, epsilon, 1 - epsilon)  # Clipping predicted values
-        loss = - np.sum(y_true * np.log(y_pred), axis=1)
-        return np.mean(loss)
+        return one_hot.flatten()
 
     def forward(self, inputs):
         weighted_sums = []
@@ -53,34 +45,26 @@ class NeuralNetwork:
 
         return weighted_sums, activations
 
-    def backward(self, X, y, weighted_sums, activations, learning_rate=0.1):
-        m = X.shape[0]
+    def backward(self, y, weighted_sums, activations):
+        dW = []
+        db = []
 
-        # Gradient of loss with respect to Z3 (output layer logits)
-        dZ3 = activations[-1] - y
-        dW3 = np.dot(activations[-2].T, dZ3) / m
-        db3 = np.sum(dZ3, axis=0, keepdims=True) / m
+        delta = activations[-1] - y
+        dW.append(np.dot(activations[-2].T, delta))
+        db.append(np.sum(delta))
         
-        # Gradient of loss with respect to A2 (second hidden layer activations)
-        dA2 = np.dot(dZ3, self.weights[-1].T)
-        dZ2 = dA2 * (weighted_sums[-2] > 0)  # Derivative of ReLU
-        dW2 = np.dot(activations[-3].T, dZ2) / m
-        db2 = np.sum(dZ2, axis=0, keepdims=True) / m
-        
-        # Gradient of loss with respect to A1 (first hidden layer activations)
-        dA1 = np.dot(dZ2, self.weights[-2].T)
-        dZ1 = dA1 * (weighted_sums[-3] > 0)  # Derivative of ReLU
-        dW1 = np.dot(X.reshape(784,1), dZ1) / m
-        db1 = np.sum(dZ1, axis=0, keepdims=True) / m
+        for i in range(len(self.layer_sizes) - 2):
+            dA = np.dot(delta, self.weights[-(i+1)].T)
+            delta = dA * self.relu_deriv(weighted_sums[-(i+2)])
+            dW.insert(0, np.dot(activations[-(i+3)].T, delta))
+            db.insert(0, np.sum(delta))
 
-        dW = [dW1, dW2, dW3]
-        db = [db1, db2, db3]
         return dW, db
     
-    def update_params(self, dW, db):
+    def update_params(self, dW, db, learning_rate=0.01):
         for i in range(len(self.layer_sizes) - 1):
-            self.weights[i] -= 0.1 * dW[i]
-            self.biases[i] -= 0.1 * db[i]
+            self.weights[i] -= learning_rate * dW[i]
+            self.biases[i] -= learning_rate * db[i]
 
     def predict(self, inputs):
         _, activations = self.forward(inputs)
@@ -90,36 +74,13 @@ class NeuralNetwork:
         with open(filename, 'wb') as file:
             pickle.dump(self, file)
 
-    def train(self, x_train, y_train, epochs, learning_rate):
+    def train(self, x_train, y_train, epochs):
         for epoch in range(epochs):
             for x, y in zip(x_train, y_train):
+                x = x.reshape(1, -1)
                 weighted_sums, activations = self.forward(x)
-                dW, db = self.backward(x, y, weighted_sums, activations)
+                dW, db = self.backward(y, weighted_sums, activations)
 
                 self.update_params(dW, db)
 
-            # loss = np.mean(np.square(y - activations[-1])) * 100
-            loss = self.categorical_cross_entropy(y, activations[-1]) * 100
-            print(f"Epoch {epoch}, Loss:{loss}")
-
-
-if __name__ == "__main__":
-    nn = NeuralNetwork()
-
-    data = pd.read_csv("train.csv")
-
-    data = np.array(data)
-    m, n = data.shape
-
-    np.random.shuffle(data)
-
-    data = data.T
-
-    y_train = data[0]
-    x_train = data[1:n].T
-
-    y_train = nn.one_hot(y_train, 10)
-
-    nn.train(x_train[:2000], y_train[:2000], 10, 0.1)
-
-    nn.save("modelo.pkl")
+            print(f"Epoch {epoch}")
