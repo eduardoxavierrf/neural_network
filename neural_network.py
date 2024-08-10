@@ -74,6 +74,11 @@ class NeuralNetwork:
         with open(filename, 'wb') as file:
             pickle.dump(self, file)
 
+    def accuracy(self, x_data, y_data):
+        results = [(self.predict(x),np.argmax(y)) for x, y in zip(x_data, y_data)]
+
+        return (sum(int(x == y) for (x, y) in results)/len(y_data)) * 100
+
     def train(self, x_train, y_train, epochs):
         for epoch in range(epochs):
             for x, y in zip(x_train, y_train):
@@ -83,4 +88,4 @@ class NeuralNetwork:
 
                 self.update_params(dW, db)
 
-            print(f"Epoch {epoch}")
+            print(f"Epoch {epoch}, Accuracy {self.accuracy(x_train, y_train):.2f}%")
