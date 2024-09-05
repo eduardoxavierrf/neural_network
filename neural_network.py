@@ -1,91 +1,72 @@
 import numpy as np
 import pickle
+import layers
 
 class NeuralNetwork:
-    def __init__(self, input_size=784, hidden_layers=[512, 512], output_size=10) -> None:
-        self.input_size = input_size
-        self.hidden_layers = hidden_layers
-        self.output_size = output_size
-        self.weights = []
-        self.biases = []
-        self.layer_sizes = [input_size] + hidden_layers + [output_size]
+  def __init__(self) -> None:
+    self.layers = [
+      layers.Linear(28 * 28, 512),
+      layers.ReLU(),
+      layers.Linear(512, 512),
+      layers.ReLU(),
+      layers.Linear(512, 10),
+      layers.Softmax()
+    ]
 
-        for i in range(len(self.layer_sizes) - 1):
-            self.weights.append(np.random.randn(self.layer_sizes[i], self.layer_sizes[i + 1]) * 0.01)
-            self.biases.append(np.zeros((1, self.layer_sizes[i + 1])))
-            
-    def relu(self, vector):
-        return np.maximum(vector, 0)
+  def forward(self, activations):
+    for layer in self.layers:
+      activations = layer.forward(activations)
+    return activations
+  
+  def backward(self, delta):
+    for layer in reversed(self.layers):
+      delta = layer.backward(delta)
 
-    def relu_deriv(self, vector):
-        return np.where(vector > 0, 1, 0)
+    return delta
+  
+  def update_params(self, learning_rate):
+    for layer in self.layers:
+      layer.update_params(learning_rate)
+
+  def cross_entropy_loss(self, y_true, y_pred):
+    y_pred = np.clip(y_pred, 1e-12, 1. - 1e-12)
+    loss = -np.sum(y_true * np.log(y_pred), axis=1)
     
-    def softmax(self, vector):
-        exps = np.exp(vector - np.max(vector))
-        return exps / np.sum(exps)
-    
-    def one_hot(self, y, num_classes):
-        one_hot = np.zeros((y.size, num_classes))
-        one_hot[np.arange(y.size), y] = 1
+    return np.mean(loss)
+  
+  def predict(self, inputs):
+    output = self.forward(inputs)
+    return np.argmax(output)
+  
+  def accuracy(self, x_data, y_data):
+    results = [(self.predict(x),np.argmax(y)) for x, y in zip(x_data, y_data)]
 
-        return one_hot.flatten()
+    return (sum(int(x == y) for (x, y) in results)/len(y_data)) * 100
 
-    def forward(self, inputs):
-        weighted_sums = []
-        activations = [inputs]
+  def train(self, x_train: np.ndarray, y_train: np.ndarray, epochs: int, batch_size: int, learning_rate:float = 0.01):
+    num_batches = x_train.shape[0] // batch_size
+    for epoch in range(epochs):
+      total_loss = 0
+      for i in range(num_batches):
+        start_idx = batch_size * i
+        end_idx = start_idx + 32
 
-        for i in range(len(self.layer_sizes) - 2):
-            z = np.dot(activations[-1], self.weights[i]) + self.biases[i]
-            weighted_sums.append(z)
-            activations.append(self.relu(z))
+        output = self.forward(x_train[start_idx:end_idx])
 
-        z = np.dot(activations[-1], self.weights[-1]) + self.biases[-1]
-        weighted_sums.append(z)
-        activations.append(self.softmax(z))
+        delta = output - y_train[start_idx:end_idx]
+        self.backward(delta)
 
-        return weighted_sums, activations
+        self.update_params(learning_rate)
+        total_loss += self.cross_entropy_loss(y_train[start_idx:end_idx], output)
 
-    def backward(self, y, weighted_sums, activations):
-        dW = []
-        db = []
+      print(f"Epoch {epoch}, Loss {total_loss/num_batches}, Accuracy {self.accuracy(x_train, y_train)}")
 
-        delta = activations[-1] - y
-        dW.append(np.dot(activations[-2].T, delta))
-        db.append(np.sum(delta))
-        
-        for i in range(len(self.layer_sizes) - 2):
-            dA = np.dot(delta, self.weights[-(i+1)].T)
-            delta = dA * self.relu_deriv(weighted_sums[-(i+2)])
-            dW.insert(0, np.dot(activations[-(i+3)].T, delta))
-            db.insert(0, np.sum(delta))
+  def one_hot(self, y, num_classes):
+    one_hot = np.zeros((y.size, num_classes))
+    one_hot[np.arange(y.size), y] = 1
 
-        return dW, db
-    
-    def update_params(self, dW, db, learning_rate=0.01):
-        for i in range(len(self.layer_sizes) - 1):
-            self.weights[i] -= learning_rate * dW[i]
-            self.biases[i] -= learning_rate * db[i]
-
-    def predict(self, inputs):
-        _, activations = self.forward(inputs)
-        return np.argmax(activations[-1])
-    
-    def save(self, filename):
-        with open(filename, 'wb') as file:
-            pickle.dump(self, file)
-
-    def accuracy(self, x_data, y_data):
-        results = [(self.predict(x),np.argmax(y)) for x, y in zip(x_data, y_data)]
-
-        return (sum(int(x == y) for (x, y) in results)/len(y_data)) * 100
-
-    def train(self, x_train, y_train, epochs):
-        for epoch in range(epochs):
-            for x, y in zip(x_train, y_train):
-                x = x.reshape(1, -1)
-                weighted_sums, activations = self.forward(x)
-                dW, db = self.backward(y, weighted_sums, activations)
-
-                self.update_params(dW, db)
-
-            print(f"Epoch {epoch}, Accuracy {self.accuracy(x_train, y_train):.2f}%")
+    return one_hot.flatten()
+  
+  def save(self, filename):
+    with open(filename, 'wb') as file:
+      pickle.dump(self, file)
