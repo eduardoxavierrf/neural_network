@@ -7,15 +7,17 @@ class NeuralNetwork:
     self.layers = [
       layers.Linear(28 * 28, 512),
       layers.ReLU(),
+      layers.Dropout(0.5),
       layers.Linear(512, 512),
       layers.ReLU(),
+      layers.Dropout(0.5),
       layers.Linear(512, 10),
       layers.Softmax()
     ]
 
-  def forward(self, activations):
+  def forward(self, activations, is_training: bool = False):
     for layer in self.layers:
-      activations = layer.forward(activations)
+      activations = layer.forward(activations, is_training=is_training)
     return activations
   
   def backward(self, delta):
@@ -34,6 +36,11 @@ class NeuralNetwork:
     
     return np.mean(loss)
   
+  def avarage_loss(self, x_data, y_data):
+    output = self.forward(x_data)
+
+    return self.cross_entropy_loss(y_data, output)
+
   def predict(self, inputs):
     output = self.forward(inputs)
     return np.argmax(output)
@@ -51,7 +58,7 @@ class NeuralNetwork:
         start_idx = batch_size * i
         end_idx = start_idx + 32
 
-        output = self.forward(x_train[start_idx:end_idx])
+        output = self.forward(x_train[start_idx:end_idx], is_training=True)
 
         delta = output - y_train[start_idx:end_idx]
         self.backward(delta)

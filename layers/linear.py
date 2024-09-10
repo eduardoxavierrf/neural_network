@@ -5,7 +5,7 @@ class Linear:
     self.weight = np.random.randn(input_size, output_size) * 0.01
     self.bias = np.zeros((1, output_size))
 
-  def forward(self, inputs: np.ndarray):
+  def forward(self, inputs: np.ndarray, is_training: bool = False):
     self.inputs = inputs
     self.z  = np.dot(self.inputs, self.weight) + self.bias
 

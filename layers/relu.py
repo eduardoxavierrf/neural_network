@@ -1,7 +1,7 @@
 import numpy as np
 
 class ReLU:
-  def forward(self, inputs):
+  def forward(self, inputs, is_training: bool = False):
     self.inputs = inputs
     return np.maximum(inputs, 0)
   
